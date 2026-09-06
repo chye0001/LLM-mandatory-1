@@ -39,8 +39,8 @@ teammate's machine.
 ## Ollama on each node
 
 Ollama defaults to `127.0.0.1:11434`, which is unreachable from other machines
-*and* rejects requests whose `Host` header is not localhost (HTTP 403). On every
-node set:
+*and* rejects requests whose `Host` header is not localhost (HTTP 403). 
+On every node when testing production/staging setup, ensure the OLLAMA_HOST is your own Tailscale IP:
 
     Windows:
     # Quit the tray app first; it holds port 11434
@@ -81,3 +81,7 @@ thrashes VRAM.
     curl http://127.0.0.1:4000/v1/chat/completions \
       -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H "Content-Type: application/json" \
       -d '{"model":"coder","messages":[{"role":"user","content":"hi"}]}'
+    
+    NOTE:
+    When doing the smoke test set the OLLAMA_HOST to 0.0.0.0. Otherwise it will fail, since Ollama automatically 
+    rejects request that does not come from localhost/127.0.0.1 with 403.
