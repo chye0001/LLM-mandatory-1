@@ -1,0 +1,35 @@
+model_list:
+
+  # --- Role-bound routing: model name selects the node ---
+  - model_name: architect
+    litellm_params:
+      model: ollama_chat/llama3.1:8b
+      api_base: http://node-b:11434
+
+  - model_name: coder
+    litellm_params:
+      model: ollama_chat/qwen2.5-coder:14b
+      api_base: http://node-a:11434
+
+  - model_name: reviewer
+    litellm_params:
+      model: ollama_chat/llama3.1:8b
+      api_base: http://node-b:11434
+
+  # --- Load-balanced pool: same name, several hosts ---
+  # LiteLLM spreads calls across every entry sharing this name.
+  - model_name: worker
+    litellm_params:
+      model: ollama_chat/qwen2.5-coder:14b
+      api_base: http://node-a:11434
+  - model_name: worker
+    litellm_params:
+      model: ollama_chat/qwen2.5-coder:14b
+      api_base: http://node-b:11434
+
+router_settings:
+  routing_strategy: least-busy
+  num_retries: 2
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
