@@ -4,7 +4,7 @@ services:
     ports:
       - "4000:4000"
     volumes:
-      - ./litellm-config.yaml:/app/config.yaml:ro
+      - ./litellm-config.yaml:/app/litellm-config.yaml:ro
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
-    command: ["--config", ".litellm-config.yaml", "--port", "4000"]
+    command: ["--config", "/app/litellm-config.yaml", "--port", "4000"]
