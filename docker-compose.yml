@@ -1,39 +1,29 @@
-# LiteLLM quickstart stack: the gateway plus a Postgres database that stores
-# models, virtual keys, and spend logs. Used by https://docs.litellm.ai/docs/proxy/docker_quick_start
+# LiteLLM gateway for the multi-node Ollama setup.
 #
-# Start it directly:
-#   curl -sSL https://docs.litellm.ai/docker-compose.yml | docker compose -f - up -d
+# No Postgres: we define models in litellm-config.yaml, not in the DB, so the
+# plain `litellm` image is enough (the `litellm-database` image + Postgres only
+# buy you DB-stored models, virtual keys and spend logs).
 #
-# The credentials below are placeholders for local evaluation. Before any real
-# use, download this file and set LITELLM_MASTER_KEY and LITELLM_SALT_KEY to
-# long random values, and pin the image to a release tag instead of `latest`.
+#   docker compose up -d
+#   curl http://127.0.0.1:4000/v1/models -H "Authorization: Bearer $LITELLM_MASTER_KEY"
 services:
   litellm:
-    image: docker.litellm.ai/berriai/litellm-database:latest
+    image: docker.litellm.ai/berriai/litellm:main-stable
     ports:
       - "4000:4000"
-    environment:
-      LITELLM_MASTER_KEY: sk-1234
-      LITELLM_SALT_KEY: sk-XXXXXXXXXXXXXXXX
-      DATABASE_URL: postgresql://litellm:litellm@db:5432/litellm
-      STORE_MODEL_IN_DB: "True"
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: litellm
-      POSTGRES_PASSWORD: litellm
-      POSTGRES_DB: litellm
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U litellm"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
+      - ./litellm-config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set it in .env}
+    # The node-a / node-b names in litellm-config.yaml are resolved here, so the
+    # config file stays identical for everyone on the team and only this mapping
+    # changes per machine. Values come from .env (see .env.example).
+    extra_hosts:
+      - "node-a:${NODE_A_IP:?set it in .env}"
+      - "node-b:${NODE_B_IP:?set it in .env}"
+      - "node-c:${NODE_C_IP:?set it in .env}"
+      - "node-d:${NODE_D_IP:?set it in .env}"
+      - "node-e:${NODE_E_IP:?set it in .env}"
+      - "node-f:${NODE_F_IP:?set it in .env}"
+    restart: unless-stopped
