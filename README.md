@@ -4,7 +4,7 @@ LiteLLM gateway that fans inference out to several Ollama nodes over Tailscale.
 
 ## Run
 
-    cp .env.example .env      # set the master key + the node IPs
+    cp .env.example .env      # generate and set the master key by running (openssl rand -hex 32), then the node IPs (tailscale).
     docker compose up -d
     curl http://127.0.0.1:4000/v1/models -H "Authorization: Bearer $LITELLM_MASTER_KEY"
 
