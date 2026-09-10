@@ -18,7 +18,7 @@ rather than by a model, and each phase stops for a human approval gate.
 | Layer | Who decides | Automatic |
 |---|---|---|
 | Phase order (architecture -> tickets -> implementation -> testing -> docs -> deployment) | `run-workflow.sh` | Scripted, not model-driven |
-| Which node each phase runs on | `-m <model>` resolved through `litellm-config.yaml` | Yes |
+| Which node each phase runs on | `--profile <role>` resolved through that profile's own `config.yaml` | Yes |
 | Context passed between phases | `$(cat docs/tickets.md)` and friends, written into the prompt | Explicit, hardcoded |
 | Approval between phases | The operator, at the `read -rp "Continue? [y/N]"` gate | No -- six manual confirmations |
 | Subagent fan-out *within* the implementation phase | Hermes `delegate_task` | Yes, fully |
@@ -28,15 +28,25 @@ Hermes is a per-phase worker that is itself agentic *inside* its phase. This is
 the two-tier architecture: CLI invocation binds role to endpoint, `delegate_task`
 provides parallelism within a role.
 
+There is no gateway between Hermes and the nodes anymore. Each of the six
+profiles (`architect`, `techlead`, `coder`, `tester`, `docs`, `deployer`) has its
+own `providers.<role>.base_url` pointing straight at that node's Ollama
+endpoint (`http://<node-ip>:11434/v1`), written by
+`bin/setup-hermes-profiles.sh` from the `.env` node IPs. `--profile <role>`
+picks the node the same way `-m <model>` used to, just without a router in the
+middle to fail or add a hop.
+
 ## Why the control flow sits one level up
 
-Two constraints in Hermes force it:
+Two constraints in Hermes force it, for the `delegate_task` fan-out
+specifically:
 
 1. **`delegation.model` is global.** A single Hermes process cannot route
-   subagent A to `architect` and subagent B to `tester`; there is no documented
-   per-call model parameter. Role-to-endpoint binding must therefore happen at
-   invocation time, which is what `-m architect` versus `-m coder` achieves.
-   LiteLLM routes on the model name, so the node is selected by configuration
+   subagent A to `architect` and subagent B to `tester` via `delegate_task`;
+   there is no per-call model parameter for that primitive. Role-to-endpoint
+   binding must therefore happen at invocation time, which is what
+   `--profile architect` versus `--profile coder` achieves -- each profile's own
+   `config.yaml` names its node, so the node is selected by configuration
    alone and nothing is rewired between runs.
 
 2. **`delegate_task` has no `toolsets` parameter.** Subagents inherit the
@@ -45,6 +55,33 @@ Two constraints in Hermes force it:
    access while `coder` holds shell and git. An architect that cannot execute
    shell commands is a meaningful safety property and concrete evidence for the
    predictability requirement.
+
+### The kanban board is a third option, not covered by either constraint
+
+`hermes kanban` routes at the *task* level instead of the process level, and
+neither constraint above applies to it:
+
+- `kanban create --assignee <profile>`, `kanban assign <task> <profile>`, and
+  `kanban set-model <task> <model> --provider <provider>` bind one task to one
+  profile/node, or override its model/provider outright, independent of
+  `delegation.model`.
+- `kanban swarm --worker coder:... --worker tester:... --worker deployer:...
+  --verifier <profile> --synthesizer <profile>` creates a parallel-workers ->
+  verifier -> synthesizer graph in one call -- a built-in replacement for both
+  the `worker` load-balanced pool LiteLLM used to provide and for hand-rolled
+  fan-out via `delegate_task`.
+- Tasks are durable (SQLite-backed), claimed atomically, can depend on each
+  other (`kanban link`), and carry review states (`request-review`,
+  `request-changes`) -- which is most of what the six-phase gate in
+  `run-workflow.sh` does by hand, as a re-runnable dispatcher loop instead of a
+  bash script.
+
+This repo's driver still uses the shell-script design in
+[workflow-script-design.md](workflow-script-design.md) because that design
+predates discovering `kanban`'s task-level routing and is further along.
+Re-platforming the six-phase pipeline onto `kanban` (one task per phase,
+linked in sequence, review gates instead of `read -rp`) is a plausible
+follow-up, not something this document assumes.
 
 ## The approval gates are deliberate
 
@@ -78,7 +115,8 @@ reused `architect` for the tech-lead and documentation phases:
     run_phase architect architect tickets.md        # tech lead
     run_phase docs      architect documentation.md  # documentation
 
-With `techlead`, `docs` and `deployer` now bound to their own nodes, those calls
-should become `run_phase techlead techlead` and `run_phase docs docs`. Otherwise
-three of the six nodes never receive traffic and the multi-endpoint requirement
-is only half demonstrated.
+With `techlead`, `docs` and `deployer` now bound to their own profiles/nodes via
+`bin/setup-hermes-profiles.sh`, those calls should become
+`run_phase techlead --profile techlead` and `run_phase docs --profile docs`.
+Otherwise three of the six nodes never receive traffic and the multi-endpoint
+requirement is only half demonstrated.

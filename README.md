@@ -1,5 +1,20 @@
 # Tool chain
 
+Hermes agent, one profile per node, talking directly to each node's Ollama
+endpoint over Tailscale. No gateway in between.
+
+## Run
+
+    cp .env.example .env               # fill in the node IPs (tailscale ip -4 on each node)
+    ./bin/setup-hermes-profiles.sh      # binds each role to its Hermes profile
+    hermes profile list                 # verify all six show the right model/provider
+
+## Topology
+
+Six nodes, one per assignment responsibility. Profile name == provider name ==
+role, so `hermes --profile tester` talks straight to the tester node.
+
+| Node | Profile | Responsibility | Model |
 A six-role agent pipeline. `run-workflow.sh` drives it end to end: one
 `hermes` process per responsibility, in a fixed order, with a human approval
 gate between phases. Each role runs on its own Ollama node over Tailscale.
@@ -48,6 +63,19 @@ Six nodes, one per assignment responsibility. Profile name == role == node, so
 | node-e | `docs` | README, API usage, runbook, design docs | llama3.1:8b |
 | node-f | `deployer` | Dockerfile/compose, checklist, config docs | qwen2.5-coder:14b |
 
+Each profile's `config.yaml` (under `~/.hermes/profiles/<role>/`) carries its
+own `providers.<role>.base_url` pointing at that node, e.g.
+`http://<node-c-ip>:11434/v1` for `coder`. `bin/setup-hermes-profiles.sh`
+writes that block from the `.env` node IPs, so the six role/model/port
+assignments stay identical for every teammate and only the IPs differ per
+machine -- the same property `litellm-config.yaml` used to provide.
+
+There is no load-balanced `worker` pool anymore (that was LiteLLM's
+`least-busy` routing over node-c/d/f). The equivalent fan-out is now done
+with the Hermes kanban board: create tasks assigned to `coder`, `tester` and
+`deployer` and the dispatcher runs them concurrently, one per profile/node.
+See [docs/orchestration-design.md](docs/orchestration-design.md) for how
+task-level routing works there.
 Each profile points at its own node's Ollama endpoint and names the model from
 this table. The profile also decides the toolset: `architect`, `techlead` and
 `docs` produce design and prose and need no terminal, while `coder`, `tester`
@@ -177,6 +205,15 @@ commit. That is normally a failed phase: retry it with `r`, or abort.
 
 ## Design notes
 
+    curl http://<node-c-ip>:11434/v1/chat/completions \
+      -H "Content-Type: application/json" \
+      -d '{"model":"qwen2.5-coder:14b","messages":[{"role":"user","content":"hi"}]}'
+
+    hermes --profile coder chat -m "hi"
+
+    NOTE:
+    When doing the smoke test set the OLLAMA_HOST to 0.0.0.0. Otherwise it will fail, since Ollama automatically 
+    rejects request that does not come from localhost/127.0.0.1 with 403.
 - [docs/orchestration-design.md](docs/orchestration-design.md) -- why the
   control flow sits in a script rather than in an agent
 - [docs/workflow-script-design.md](docs/workflow-script-design.md) -- the
