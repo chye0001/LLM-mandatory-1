@@ -1,40 +1,41 @@
 # Tool chain
 
-LiteLLM gateway that fans inference out to several Ollama nodes over Tailscale.
+Hermes agent, one profile per node, talking directly to each node's Ollama
+endpoint over Tailscale. No gateway in between.
 
 ## Run
 
-    cp .env.example .env      # generate and set the master key by running (openssl rand -hex 32), then the node IPs (tailscale).
-    docker compose up -d
-    curl http://127.0.0.1:4000/v1/models -H "Authorization: Bearer $LITELLM_MASTER_KEY"
-
-`litellm-config.yaml` is mounted at `/app/config.yaml` and passed with
-`--config`; without that flag LiteLLM starts with an empty model list.
+    cp .env.example .env               # fill in the node IPs (tailscale ip -4 on each node)
+    ./bin/setup-hermes-profiles.sh      # binds each role to its Hermes profile
+    hermes profile list                 # verify all six show the right model/provider
 
 ## Topology
 
-Six nodes, one per assignment responsibility. Profile name == model name ==
-role, so `hermes --profile tester chat -m tester` reads as one thing.
+Six nodes, one per assignment responsibility. Profile name == provider name ==
+role, so `hermes --profile tester` talks straight to the tester node.
 
-| Node | Role | Responsibility | Model | In worker pool |
-|---|---|---|---|---|
-| node-a | `architect` | Architecture: decomposition, OpenAPI, topology, ADRs | llama3.1:8b | |
-| node-b | `techlead` | Tickets: scope, acceptance criteria, ordering | llama3.1:8b | |
-| node-c | `coder` | Implementation: multi-file repo changes | qwen2.5-coder:14b | yes |
-| node-d | `tester` | Tests + quality report, static checks, risks | qwen2.5-coder:14b | yes |
-| node-e | `docs` | README, API usage, runbook, design docs | llama3.1:8b | |
-| node-f | `deployer` | Dockerfile/compose, checklist, config docs | qwen2.5-coder:14b | yes |
+| Node | Profile | Responsibility | Model |
+|---|---|---|---|
+| node-a | `architect` | Architecture: decomposition, OpenAPI, topology, ADRs | llama3.1:8b |
+| node-b | `techlead` | Tickets: scope, acceptance criteria, ordering | llama3.1:8b |
+| node-c | `coder` | Implementation: multi-file repo changes | qwen2.5-coder:14b |
+| node-d | `tester` | Tests + quality report, static checks, risks | qwen2.5-coder:14b |
+| node-e | `docs` | README, API usage, runbook, design docs | llama3.1:8b |
+| node-f | `deployer` | Dockerfile/compose, checklist, config docs | qwen2.5-coder:14b |
 
-`worker` is a load-balanced pool over node-c, node-d and node-f -- the three
-that already hold the coder model. Those two extra nodes are idle during the
-implementation phase, so lending them to the fan-out gives N=3 concurrent
-coding workers for free. This is what `delegation.model` targets in Hermes,
-whose delegation config is global.
+Each profile's `config.yaml` (under `~/.hermes/profiles/<role>/`) carries its
+own `providers.<role>.base_url` pointing at that node, e.g.
+`http://<node-c-ip>:11434/v1` for `coder`. `bin/setup-hermes-profiles.sh`
+writes that block from the `.env` node IPs, so the six role/model/port
+assignments stay identical for every teammate and only the IPs differ per
+machine -- the same property `litellm-config.yaml` used to provide.
 
-The `node-a`..`node-f` names are resolved by the `extra_hosts` block in
-`docker-compose.yml`, reading each node's tailnet IP from `.env`. That keeps
-`litellm-config.yaml` -- the submitted artifact -- byte-identical on every
-teammate's machine.
+There is no load-balanced `worker` pool anymore (that was LiteLLM's
+`least-busy` routing over node-c/d/f). The equivalent fan-out is now done
+with the Hermes kanban board: create tasks assigned to `coder`, `tester` and
+`deployer` and the dispatcher runs them concurrently, one per profile/node.
+See [docs/orchestration-design.md](docs/orchestration-design.md) for how
+task-level routing works there.
 
 ## Ollama on each node
 
@@ -78,10 +79,12 @@ thrashes VRAM.
 
 ## Smoke test
 
-    curl http://127.0.0.1:4000/v1/chat/completions \
-      -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H "Content-Type: application/json" \
-      -d '{"model":"coder","messages":[{"role":"user","content":"hi"}]}'
-    
+    curl http://<node-c-ip>:11434/v1/chat/completions \
+      -H "Content-Type: application/json" \
+      -d '{"model":"qwen2.5-coder:14b","messages":[{"role":"user","content":"hi"}]}'
+
+    hermes --profile coder chat -m "hi"
+
     NOTE:
     When doing the smoke test set the OLLAMA_HOST to 0.0.0.0. Otherwise it will fail, since Ollama automatically 
     rejects request that does not come from localhost/127.0.0.1 with 403.
