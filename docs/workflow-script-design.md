@@ -129,15 +129,15 @@ clean branch" becomes a property of the tool rather than a procedure to remember
 ## Expectations for the rerun comparison
 
 Runs will differ even in fixed mode; the checklist says as much, and divergence
-is a finding to document rather than a failure. Divergence has three sources at
-once:
+is a finding to document rather than a failure. Divergence has two sources at
+once, now that routing is a fixed profile-to-node binding rather than a
+load-balanced pool:
 
 1. sampling randomness
-2. `least-busy` routing sending tickets to different nodes
-3. genuine model non-determinism
+2. genuine model non-determinism
 
-Pinning `temperature: 0` in `litellm_params` removes (1) and makes the others
-legible. Worth running as a deliberate experiment rather than adopting as a
+Pinning `temperature: 0` in each profile's `config.yaml` removes (1) and makes
+(2) legible. Worth running as a deliberate experiment rather than adopting as a
 default.
 
 The useful question is not whether outputs match but *where* they diverge. Stable
