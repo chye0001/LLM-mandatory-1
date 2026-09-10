@@ -1,0 +1,4 @@
+# core.autocrlf=true rewrites LF to CRLF on checkout, which turns the shebang
+# into "/usr/bin/env bash\r" and makes bash fail with "bad interpreter".
+# Shell scripts must stay LF on every machine.
+*.sh text eol=lf
