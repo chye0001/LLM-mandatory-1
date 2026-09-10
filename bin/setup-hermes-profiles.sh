@@ -26,7 +26,7 @@ set +a
 
 # role:node-ip-var:model
 ROLES=(
-  "architect:NODE_A_IP:ggml-org/gemma-4-12B-it-GGUF:Q4_0"
+  "architect:NODE_A_IP:unsloth/Qwen3.5-9B-GGUF:Q4_K_XL"
   "techlead:NODE_B_IP:unsloth/Qwen3.5-9B-GGUF:Q4_K_XL"
   "coder:NODE_C_IP:unsloth/Qwen3.5-9B-GGUF:Q4_K_XL"
   "tester:NODE_D_IP:unsloth/Qwen3.5-9B-GGUF:Q4_K_XL"
