@@ -1,0 +1,21 @@
+services:
+  opencode:
+    image: opencode-sandbox
+    working_dir: /workspace
+    env_file:
+      - .env
+    user: "1000:1000"
+    volumes:
+      - .:/workspace
+      - ./.opencode:/workspace/.opencode:ro
+      - opencode-config:/home/dev/.config/opencode
+      - opencode-state:/home/dev/.local/share/opencode
+    extra_hosts:
+      - "node-a:100.x.y.z"
+      - "node-b:100.x.y.w"
+    stdin_open: true
+    tty: true
+
+volumes:
+  opencode-config:
+  opencode-state:
