@@ -128,6 +128,20 @@ unset `NODE_C_MODEL` registers a model with an empty name. Neither one errors
 when the config loads, so the failure appears when a phase first calls that
 node.
 
+One machine is the limit of this. Point all six at the ollama on this host and
+set every `NODE_*_MODEL` to the same tag from `ollama list`.
+
+```sh
+NODE_A_HOST=host.docker.internal:11434   # and B through F
+```
+
+`host.docker.internal` is the host as seen from inside the container.
+`localhost` there is the container itself. Ollama must also listen beyond
+`127.0.0.1` or the container cannot reach it, see
+[Ollama on each node](#ollama-on-each-node). On Linux add
+`extra_hosts: - "host.docker.internal:host-gateway"` to the compose file, which
+Docker Desktop does not need.
+
 ### Backends
 
 `@ai-sdk/openai-compatible` drives either backend without changes, because both
