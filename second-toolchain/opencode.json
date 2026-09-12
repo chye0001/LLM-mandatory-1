@@ -10,19 +10,109 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "Node A",
       "options": {
-        "baseURL": "{env:NODE_A_BASE_URL}",
+        "baseURL": "http://{env:NODE_A_HOST}/v1",
         "apiKey": "{env:NODE_A_API_KEY}"
       },
-      "models": {}
+      "models": {
+        "{env:NODE_A_MODEL}": {
+          "name": "{env:NODE_A_MODEL}",
+          "tool_call": true
+        }
+      }
     },
     "node-b": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "Node B",
       "options": {
-        "baseURL": "{env:NODE_B_BASE_URL}",
+        "baseURL": "http://{env:NODE_B_HOST}/v1",
         "apiKey": "{env:NODE_B_API_KEY}"
       },
-      "models": {}
+      "models": {
+        "{env:NODE_B_MODEL}": {
+          "name": "{env:NODE_B_MODEL}",
+          "tool_call": true
+        }
+      }
+    },
+    "node-c": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Node C",
+      "options": {
+        "baseURL": "http://{env:NODE_C_HOST}/v1",
+        "apiKey": "{env:NODE_C_API_KEY}"
+      },
+      "models": {
+        "{env:NODE_C_MODEL}": {
+          "name": "{env:NODE_C_MODEL}",
+          "tool_call": true
+        }
+      }
+    },
+    "node-d": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Node D",
+      "options": {
+        "baseURL": "http://{env:NODE_D_HOST}/v1",
+        "apiKey": "{env:NODE_D_API_KEY}"
+      },
+      "models": {
+        "{env:NODE_D_MODEL}": {
+          "name": "{env:NODE_D_MODEL}",
+          "tool_call": true
+        }
+      }
+    },
+    "node-e": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Node E",
+      "options": {
+        "baseURL": "http://{env:NODE_E_HOST}/v1",
+        "apiKey": "{env:NODE_E_API_KEY}"
+      },
+      "models": {
+        "{env:NODE_E_MODEL}": {
+          "name": "{env:NODE_E_MODEL}",
+          "tool_call": true
+        }
+      }
+    },
+    "node-f": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Node F",
+      "options": {
+        "baseURL": "http://{env:NODE_F_HOST}/v1",
+        "apiKey": "{env:NODE_F_API_KEY}"
+      },
+      "models": {
+        "{env:NODE_F_MODEL}": {
+          "name": "{env:NODE_F_MODEL}",
+          "tool_call": true
+        }
+      }
+    }
+  },
+  "model": "node-a/{env:NODE_A_MODEL}",
+  "agent": {
+    "architect": {
+      "model": "node-a/{env:NODE_A_MODEL}"
+    },
+    "techlead": {
+      "model": "node-b/{env:NODE_B_MODEL}"
+    },
+    "coder-a": {
+      "model": "node-c/{env:NODE_C_MODEL}"
+    },
+    "coder-b": {
+      "model": "node-f/{env:NODE_F_MODEL}"
+    },
+    "tester": {
+      "model": "node-d/{env:NODE_D_MODEL}"
+    },
+    "docwriter": {
+      "model": "node-e/{env:NODE_E_MODEL}"
+    },
+    "deployer": {
+      "model": "node-f/{env:NODE_F_MODEL}"
     }
   }
 }
