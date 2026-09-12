@@ -10,9 +10,6 @@ services:
       - ./.opencode:/workspace/.opencode:ro
       - opencode-config:/home/dev/.config/opencode
       - opencode-state:/home/dev/.local/share/opencode
-    extra_hosts:
-      - "node-a:100.x.y.z"
-      - "node-b:100.x.y.w"
     stdin_open: true
     tty: true
 
