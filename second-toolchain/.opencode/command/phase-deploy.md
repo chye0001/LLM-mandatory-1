@@ -1,11 +1,13 @@
 ---
 description: Build and deploy
+agent: deployer
 ---
 
 # Phase: Deploy
 
-TODO: what this phase does, and which agent(s) drive it.
+TODO: what this phase does.
 
-Delegate to the `deployer` agent.
+Runs as the `deployer` agent, pinned in frontmatter — the command *is* that
+agent, so there is no delegation step to get wrong.
 
 Arguments: $ARGUMENTS

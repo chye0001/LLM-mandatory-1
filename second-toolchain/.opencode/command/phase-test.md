@@ -1,11 +1,13 @@
 ---
 description: Write and run the test suite
+agent: tester
 ---
 
 # Phase: Test
 
-TODO: what this phase does, and which agent(s) drive it.
+TODO: what this phase does.
 
-Delegate to the `tester` agent.
+Runs as the `tester` agent, pinned in frontmatter — the command *is* that
+agent, so there is no delegation step to get wrong.
 
 Arguments: $ARGUMENTS

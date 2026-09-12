@@ -1,11 +1,13 @@
 ---
 description: Write the documentation
+agent: docwriter
 ---
 
 # Phase: Docs
 
-TODO: what this phase does, and which agent(s) drive it.
+TODO: what this phase does.
 
-Delegate to the `docwriter` agent.
+Runs as the `docwriter` agent, pinned in frontmatter — the command *is* that
+agent, so there is no delegation step to get wrong.
 
 Arguments: $ARGUMENTS

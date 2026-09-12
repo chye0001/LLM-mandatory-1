@@ -1,11 +1,13 @@
 ---
 description: Produce the system architecture
+agent: architect
 ---
 
 # Phase: Architecture
 
-TODO: what this phase does, and which agent(s) drive it.
+TODO: what this phase does.
 
-Delegate to the `architect` agent.
+Runs as the `architect` agent, pinned in frontmatter — the command *is* that
+agent, so there is no delegation step to get wrong.
 
 Arguments: $ARGUMENTS
