@@ -1,108 +1,204 @@
-# Tool chain 2 — opencode in a container
+# Tool chain 2: opencode in a container
 
 The same six-responsibility pipeline as [`../first-toolchain`](../first-toolchain),
-rebuilt on [opencode](https://opencode.ai) instead of Hermes. Two things change:
+rebuilt on [opencode](https://opencode.ai) instead of Hermes. Two things differ.
 
-- **Sequencing lives in opencode**, not in a driver script. Each phase is a
-  slash command under `.opencode/command/`, and each role is an agent under
-  `.opencode/agent/`. There is no `run-workflow.sh` equivalent — the user still
-  types the phases in order, but which agent each one runs as is pinned in
-  frontmatter rather than chosen by a model.
-- **The agent runs in a container.** It sees the repo and nothing else, so a
-  confused local model cannot reach the rest of the machine.
+Sequencing lives in opencode rather than in a driver script. Each phase is a
+slash command under `.opencode/command/`, and each role is an agent under
+`.opencode/agent/`. There is no `run-workflow.sh` equivalent.
 
-## Run
+The agent runs in a container. It sees the repo and nothing else, so a confused
+local model cannot reach the rest of the machine.
+
+---
+
+## Part 1: running it
+
+### Requirements
+
+- Docker. The sandbox image builds on first run, see
+  [Sandbox image](#sandbox-image).
+- At least one machine running an OpenAI-compatible model server and reachable
+  from this one. ollama and llama.cpp both work. See [Backends](#backends).
+
+### Setup
+
+Copy the example environment file.
 
 ```sh
-cp .env.example .env          # six node addresses, keys and model IDs
+cp .env.example .env
+```
+
+Edit `.env`. It defines six nodes, `node-a` through `node-f`, and each node has
+three variables.
+
+| Variable | What to put in it |
+|---|---|
+| `NODE_A_HOST` | Address and port of the server, such as `100.64.0.1:11434`. No scheme, no path. |
+| `NODE_A_API_KEY` | Leave empty unless the server requires a key. |
+| `NODE_A_MODEL` | The model ID that server reports, copied exactly. |
+
+`opencode.json` wraps each host as `http://<host>/v1`, so do not write `http://`
+or `/v1` into the variable.
+
+Check that a node answers before starting the container.
+
+```sh
+curl http://100.64.0.1:11434/v1/models
+```
+
+Then start it. The first run builds the sandbox image, which takes a few
+minutes. Later runs reuse it.
+
+```sh
 docker compose run --rm opencode
 ```
 
-Then, inside the TUI, drive the phases in order:
+The image installs `nodejs npm python3` by default. If the project uses another
+language, set `LANG_PACKAGES` in `.env` and rebuild with
+`docker compose build`.
+
+### Running a workflow
+
+Inside the TUI, run the phases in order.
 
 ```
-/phase-architecture  ->  /phase-tickets  ->  /phase-implement
-/phase-test          ->  /phase-docs     ->  /phase-deploy
+/phase-architecture
+/phase-tickets
+/phase-implement
+/phase-test
+/phase-docs
+/phase-deploy
 ```
 
-Prerequisites: Docker, and the `opencode-sandbox` image (see
-[Container](#container) — the Dockerfile is not written yet).
-
-## Layout
-
-```
-opencode.json              providers, role-to-model bindings, global permissions
-AGENTS.md                  project instructions, loaded into every session
-docker-compose.yaml        the sandbox
-.env                       node addresses, keys, model IDs — not committed
-.opencode/
-  agent/                   one file per role
-  command/                 phase drivers, invoked as /phase-architecture etc.
-docs/  src/  tests/        the work product
-```
-
-## Roles
-
-One file per role in `.opencode/agent/`. Role names match the first tool chain,
-except that `coder` is split in two so implementation tickets can be worked in
-parallel.
-
-| Agent | Responsibility | Node | Model |
-|---|---|---|---|
-| `architect` | Architecture: decomposition, OpenAPI, topology, ADRs | `node-a` | `llama3.1:8b` |
-| `techlead` | Tickets: scope, acceptance criteria, ordering | `node-b` | `llama3.1:8b` |
-| `coder-a` | Implementation: assigned tickets | `node-c` | `qwen2.5-coder:14b` |
-| `coder-b` | Implementation: assigned tickets | `node-f` | `qwen2.5-coder:14b` |
-| `tester` | Tests and quality report, static checks, risks | `node-d` | `qwen2.5-coder:14b` |
-| `docwriter` | README, API usage, runbook, design docs | `node-e` | `llama3.1:8b` |
-| `deployer` | Dockerfile/compose, checklist, config docs | `node-f` | `qwen2.5-coder:14b` |
-
-Nodes and models line up with [`../first-toolchain`](../first-toolchain)
-role-for-role, so the two chains are compared on prompting and orchestration
-rather than on hardware.
-
-The one asymmetry is the seventh role. The first chain has a single `coder` on
-`node-c`; splitting it here needs a second machine with the coder model, and the
-three that have it — `node-c`, `node-d`, `node-f` — are already taken. `coder-b`
-therefore shares `node-f` with `deployer`. Nothing contends: phases run one at a
-time, and `deployer` is the last phase while the coders run in `implement`.
-`node-d` was left alone so `tester`, which runs immediately after `implement`,
-never waits on a coder.
-
-The node column is the role-to-endpoint binding from `opencode.json`; the model
-each node serves comes from `.env`. See [Models](#models).
+Each command runs as its own role on its own node. Nothing enforces the
+ordering, so you type the phases yourself.
 
 ### Running on fewer machines
 
-The six-node split is the default, not a requirement. Roles are bound to
-*providers*, and several providers can point at the same machine — so to run on
-two machines, give the spare nodes an address you actually have:
+Six nodes is the default, not a requirement. Roles bind to providers, and
+several providers can address one machine. To run on two machines, give the
+spare nodes an address you have.
 
 ```sh
-NODE_A_HOST=100.64.0.1:11434   # architect, and everything else on the small model
+NODE_A_HOST=100.64.0.1:11434
 NODE_B_HOST=100.64.0.1:11434
 NODE_E_HOST=100.64.0.1:11434
-NODE_C_HOST=100.64.0.2:11434   # the coder model
+NODE_C_HOST=100.64.0.2:11434
 NODE_D_HOST=100.64.0.2:11434
 NODE_F_HOST=100.64.0.2:11434
 ```
 
-Keep each node's `NODE_*_MODEL` matching what that machine actually serves.
-Collapsing this way costs the parallelism between `coder-a` and `coder-b`, which
-is the only reason the role was split.
+Set each `NODE_*_MODEL` to the model that machine actually serves. Collapsing
+this way costs the parallelism between `coder-a` and `coder-b`, which is the
+only reason that role was split.
 
-**All six must be set to something reachable.** An unset `NODE_C_HOST` becomes
-`http:///v1` and an unset `NODE_C_MODEL` registers an empty model name — neither
-errors at load time, so an unused node fails at the moment a phase delegates to
-it rather than at startup.
+Fill in all six nodes. An unset `NODE_C_HOST` resolves to `http:///v1`, and an
+unset `NODE_C_MODEL` registers a model with an empty name. Neither one errors
+when the config loads, so the failure appears when a phase first calls that
+node.
 
-All seven are declared `mode: subagent`, so no role is reachable by the user
-switching agent by hand — a phase command is the only way in.
+### Backends
+
+`@ai-sdk/openai-compatible` drives either backend without changes, because both
+expose `/v1/chat/completions`. Only `.env` differs.
+
+| | ollama | llama.cpp (`llama-server`) |
+|---|---|---|
+| `NODE_*_HOST` | `<ip>:11434` | `<ip>:8080` |
+| `NODE_*_API_KEY` | ignored, leave empty | empty unless started with `--api-key` |
+| `NODE_*_MODEL` | the tag, from `ollama list` | the `--alias`, otherwise the `.gguf` filename |
+| Serves | many models, loaded on demand | one model per process |
+
+Two things to watch, neither of which the config can fix.
+
+The `/v1` suffix is required. ollama's native API is at `/api` and the
+OpenAI-compatible one is at `/v1`. `opencode.json` hardcodes the suffix, which is
+why `NODE_*_HOST` must not repeat it.
+
+Tool calling has to work on the model itself. Every role edits files, so a model
+without a tool-calling chat template is useless here whatever the config says.
+ollama needs a model whose template declares tools, and llama.cpp needs
+`--jinja`. A model that describes a tool call in prose instead of emitting one
+is failing this.
+
+### Troubleshooting
+
+A provider gets an empty `baseURL` or `apiKey`. The variable never reached the
+container. Run `docker compose config` and read the resolved `environment:`
+block. If the value is empty there, the problem is in `.env`, not in opencode.
+
+A provider cannot connect. No name resolution happens anywhere in the path, so
+the cause is the address or the tailnet. `opencode debug config` shows the
+assembled `baseURL`. If it looks right, test the server directly with
+`curl http://<host>/v1/models`.
+
+The model returns 404, or a role uses the wrong one. Run
+`opencode debug agent <role>`, which prints the resolved `providerID` and
+`modelID`. A `modelID` still reading `{env:...}` means the binding sits in the
+role's frontmatter, where substitution does not run, so move it to the `agent`
+block in `opencode.json`. An empty `modelID` means the variable is unset. An ID
+the server rejects should be compared against `curl http://<host>/v1/models`.
+
+An agent or command does not appear. Run `opencode debug config` and look at the
+`agent` and `command` keys. A missing `description` in the frontmatter is the
+usual cause.
+
+`.opencode/.gitignore` appeared on its own. opencode writes it, and that is
+expected.
+
+---
+
+## Part 2: how the setup works
+
+### Layout
+
+```
+opencode.json              providers, role-to-model bindings, permissions
+AGENTS.md                  project instructions, loaded into every session
+Dockerfile                 the sandbox image
+docker-compose.yaml        the sandbox
+.env                       node addresses, keys, model IDs. Not committed
+.opencode/
+  agent/                   one file per role
+  command/                 phase drivers, invoked as /phase-architecture
+docs/  src/  tests/        the work product
+```
+
+### Roles
+
+One file per role in `.opencode/agent/`. Role names match the first tool chain,
+except that `coder` is split in two so implementation tickets can run in
+parallel.
+
+| Agent | Responsibility |
+|---|---|
+| `architect` | Architecture: decomposition, OpenAPI, topology, ADRs |
+| `techlead` | Tickets: scope, acceptance criteria, ordering |
+| `coder-a` | Implementation: assigned tickets |
+| `coder-b` | Implementation: assigned tickets |
+| `tester` | Tests and quality report, static checks, risks |
+| `docwriter` | README, API usage, runbook, design docs |
+| `deployer` | Dockerfile and compose, checklist, config docs |
+
+Each role binds to one provider in the `agent` block of `opencode.json`, and the
+model that provider serves comes from `.env`. See [Models](#models) for the
+binding, and `opencode.json` for the mapping in force.
+
+Roles can share a node. With more roles than machines some sharing is required,
+and it costs nothing as long as the roles that share never run in the same
+phase. `coder-a` and `coder-b` are the pair to keep apart, because running them
+on one node removes the parallelism that splitting the role provides.
+
+All seven roles declare `mode: subagent`, so a phase command is the only way to
+reach them. Every agent and command body is still a `TODO` stub. The wiring is
+proven, see [What has been verified](#what-has-been-verified), but the prompts
+are not written.
 
 ### Phase routing
 
 Five of the six phase commands name their agent in frontmatter, so the command
-*is* that agent and no model decides where the work goes:
+is that agent and no model decides where the work goes.
 
 ```yaml
 ---
@@ -115,37 +211,26 @@ agent: architect
 |---|---|
 | `/phase-architecture` | `architect` |
 | `/phase-tickets` | `techlead` |
-| `/phase-implement` | primary agent → `coder-a` + `coder-b` |
+| `/phase-implement` | the primary agent, which calls `coder-a` and `coder-b` |
 | `/phase-test` | `tester` |
 | `/phase-docs` | `docwriter` |
 | `/phase-deploy` | `deployer` |
 
 `/phase-implement` is the exception. `agent:` takes one name, and this phase runs
-both coders in parallel — the only reason the `coder` role was split — so it
-stays in the primary agent and fans out with the task tool. It is the one phase
-whose routing still depends on a model's judgement.
+both coders in parallel, so it stays in the primary agent and fans out with the
+task tool. Its routing is the only routing that still depends on a model's
+judgement.
 
-That makes the top-level `"model"` in `opencode.json` the **primary agent's**
-model: `build` and `plan` carry no model of their own and resolve from it at
-session start. With five phases pinned, it drives `/phase-implement`'s fan-out
-and whatever you type directly into the TUI — not the pinned roles, which take
-their model from the `agent` block.
-
-**The bodies are stubs.** Every agent and command file currently contains
-`TODO:` placeholders. The wiring is proven (see
-[What has been verified](#what-has-been-verified)); the prompts are not written.
-
-## Configuration
-
-`opencode.json` holds both halves of the setup: which endpoint and model each
-role talks to, and what the agent is allowed to do. Nothing environment-specific
-is committed — endpoints, keys and model IDs are all `{env:}` placeholders fed
-from `.env`.
+This is what the top-level `"model"` in `opencode.json` is for. The primary
+agents, `build` and `plan`, carry no model of their own and resolve it from that
+key when a session starts. With five phases pinned, it drives the fan-out inside
+`/phase-implement` and anything you type directly into the TUI. It does not
+affect the pinned roles, which take their model from the `agent` block.
 
 ### Providers and secrets
 
-Endpoints and keys are **not** written into `opencode.json`. The file carries
-placeholders, which opencode substitutes at load time:
+Endpoints, keys and model IDs stay out of `opencode.json`. The file carries
+placeholders that opencode substitutes when it loads the config.
 
 ```json
 "options": {
@@ -154,28 +239,23 @@ placeholders, which opencode substitutes at load time:
 }
 ```
 
-Substitution also works **mid-string**, which is what lets the scheme and the
-`/v1` path stay in `opencode.json` while only the address varies per
-deployment. `NODE_A_HOST` carries `ip:port` together — the port belongs with the
-address because it is what distinguishes the backends (see
-[Backends](#backends)).
+Substitution also works mid-string, which is what lets the scheme and the `/v1`
+path stay in `opencode.json` while only the address changes per deployment.
+`NODE_A_HOST` carries the address and port together, because the port is what
+distinguishes the two backends.
 
-`{env:VAR}` reads the **process environment**. opencode does *not* read `.env`
-files itself — Compose does, via `env_file: .env` in `docker-compose.yaml`,
-which turns the file into real container environment where `{env:}` can see it.
+`{env:VAR}` reads the process environment. opencode does not read `.env` files
+itself. Compose does, through `env_file: .env` in `docker-compose.yaml`, which
+turns the file into real container environment that `{env:}` can see. A missing
+variable resolves to an empty string instead of raising an error, so check
+`docker compose config` first when a provider fails to connect.
 
-> A variable that is missing resolves to an empty string rather than an error.
-> If a provider fails to connect, check `docker compose config` first to confirm
-> the value actually reached the container.
-
-`{file:./path}` is the other supported form, if you would rather keep a key in
-its own file than in the environment.
+`{file:./path}` is the other supported form, for keeping a key in its own file.
 
 ### Models
 
-Model IDs come from `.env` too. Substitution runs over the whole of
-`opencode.json`, **including object keys**, so the entry in a provider's `models`
-map can itself be a placeholder:
+Substitution runs over the whole of `opencode.json`, including object keys, so
+the entry in a provider's `models` map can itself be a placeholder.
 
 ```json
 "models": {
@@ -183,74 +263,32 @@ map can itself be a placeholder:
 }
 ```
 
-Roles are then bound to a node in the `agent` block, reusing the same variable,
-so the model ID is written once per node and never repeats:
+Roles then bind to a node in the `agent` block and reuse the same variable, so
+each model ID is written once.
 
 ```json
 "agent": {
-  "architect": { "model": "node-a/{env:NODE_A_MODEL}" },
-  "coder-b":   { "model": "node-f/{env:NODE_F_MODEL}" }
+  "<role>": { "model": "node-a/{env:NODE_A_MODEL}" }
 }
 ```
 
-Which *node* a role talks to is an architecture decision and stays in
-`opencode.json`; which *model* that node serves is deployment config and lives in
-`.env`. To retarget a role, edit its one line; to swap models, edit `.env` only.
-
-Set the ID exactly as the server reports it:
-
-| Server | `NODE_*_MODEL` | Check with |
-|---|---|---|
-| ollama | the tag, e.g. `qwen2.5-coder:7b` | `ollama list` |
-| llama.cpp | the `-a/--alias` value, else the `.gguf` filename | `curl http://$NODE_A_HOST/v1/models` |
+Which node a role talks to is an architecture decision and stays in
+`opencode.json`. Which model that node serves is deployment config and lives in
+`.env`. Retargeting a role is a one-line edit, and swapping models touches only
+`.env`.
 
 `tool_call: true` is deliberate. A model declared on a custom
 `openai-compatible` provider carries no capability metadata from the registry,
-and every role here has to edit files and run commands, so the flag has to be
-stated.
+and every role here edits files and runs commands, so the flag has to be stated.
 
-> **Agent frontmatter is not substituted.** `model: node-a/{env:X}` in
-> `.opencode/agent/*.md` is stored verbatim — `opencode debug agent architect`
-> reports `"modelID": "{env:X}"`, and the request goes out with that literal
-> string. Only `opencode.json` is substituted, which is why the bindings live
-> there rather than in the role files.
+Each node declares one model, so `NODE_*_MODEL` is the single source of truth
+for what that machine serves. Adding a second model means adding another key to
+the same `models` map.
 
-Each node declares exactly one model, so `NODE_*_MODEL` is the single source of
-truth for what that machine serves — the same one-model-per-node discipline the
-first tool chain gets from `OLLAMA_MAX_LOADED_MODELS=1`. To give one node a
-second model, add another key to its `models` map and point the relevant roles
-at it. Keep every declared key backed by a variable that is actually set — an
-unset one collapses to `""` and registers an unusable empty-named model.
-
-### Backends
-
-`"npm": "@ai-sdk/openai-compatible"` is the generic OpenAI-compatible client, so
-it drives **either** ollama or llama.cpp unchanged — both expose
-`/v1/chat/completions`, and nothing in `opencode.json` is specific to one. Only
-`.env` differs:
-
-| | ollama | llama.cpp (`llama-server`) |
-|---|---|---|
-| `NODE_*_HOST` | `<tailnet-ip>:11434` | `<tailnet-ip>:8080` |
-| `NODE_*_API_KEY` | ignored, leave empty | empty unless started with `--api-key` |
-| `NODE_*_MODEL` | the tag (`qwen2.5-coder:7b`) | the `--alias`, else the `.gguf` filename |
-| Serves | many models, loaded on demand | one model per process |
-
-Two things to watch, neither of which the config can fix:
-
-- **The `/v1` suffix is required.** The native ollama API is at `/api`, and the
-  OpenAI-compatible one at `/v1`. It is hardcoded in `opencode.json` precisely
-  so it cannot be forgotten — do not repeat it in `NODE_*_HOST`.
-- **Tool calling has to actually work.** Every role here edits files, so a model
-  without a tool-calling chat template is useless regardless of `tool_call: true`.
-  ollama needs a model whose template declares tools; llama.cpp needs
-  `--jinja` (and benefits from an explicit `--chat-template`). A model that
-  narrates a tool call in prose instead of emitting one is this failing.
-
-opencode's provider registry also carries ollama entries, but the custom-provider
-form is the right one here regardless: it pins the endpoint explicitly, which is
-what remote nodes over a tailnet need, and it keeps one code path whichever
-backend a node runs.
+Frontmatter is not substituted, in either agent or command files. Writing
+`model: node-a/{env:X}` in `.opencode/agent/*.md` stores that string verbatim,
+and `opencode debug agent architect` then reports `"modelID": "{env:X}"`. Only
+`opencode.json` is substituted, which is why the bindings live there.
 
 ### Permissions
 
@@ -262,15 +300,45 @@ backend a node runs.
 }
 ```
 
-`external_directory` gates paths outside the working directory; the Build agent
-asks by default, and this denies instead. Note what it does *not* do: inside the
-container the working directory is `/workspace`, so this blocks nothing within
-the repo. That is intentional — the repo is the agent's workspace, and the
+`external_directory` gates paths outside the working directory. The Build agent
+asks by default and this denies instead. Note what it does not do. Inside the
+container the working directory is `/workspace`, so it blocks nothing within the
+repo. That is intentional, because the repo is the agent's workspace and the
 container boundary is what keeps the rest of the machine out of reach.
 
-## Container
+### Sandbox image
 
-`docker-compose.yaml` runs opencode with the repo as its only mount:
+`Dockerfile` builds on `ghcr.io/anomalyco/opencode`, the published opencode
+image. That base is Alpine plus the opencode binary and ripgrep, and nothing
+else. It cannot run tests and has no git, so it adds three things.
+
+Git, because the workflow has to produce commits or reviewable diffs and the
+base image has none.
+
+A language toolchain, passed in as the `LANG_PACKAGES` build argument rather
+than written into the Dockerfile. The sandbox does not assume a language, so a
+project in Go builds the same image with `LANG_PACKAGES=go` in `.env`. The
+default is `nodejs npm python3`. Add `build-base` when native modules have to
+compile.
+
+An unprivileged `dev` user with uid 1000 and a real home directory. The compose
+file runs as `1000:1000`, and without a passwd entry `HOME` falls back to `/`,
+which that uid cannot write. Creating `/home/dev/.config/opencode` and
+`/home/dev/.local/share/opencode` in the image also gives the named volumes
+their ownership, because Docker seeds an empty volume from the image path it
+covers.
+
+The opencode version is pinned to `1.18.29`, the version every claim under
+[What has been verified](#what-has-been-verified) was checked against. The
+published image has since moved to `2.0.x`.
+
+`.dockerignore` excludes everything except the Dockerfile. The repo arrives at
+runtime as a bind mount, so sending it as build context would only slow the
+build and copy `.env` into an image layer.
+
+### Container
+
+`docker-compose.yaml` runs opencode with the repo as its only mount.
 
 ```yaml
 volumes:
@@ -279,143 +347,93 @@ volumes:
 ```
 
 The host path is relative on purpose. Compose resolves relative bind mounts
-against **the directory holding the compose file**, not the shell's working
+against the directory holding the compose file rather than the shell's working
 directory, so `docker compose -f /any/path/docker-compose.yaml up` still mounts
-this repo.
+this repo. Compose reads `.env` by the same rule.
 
 `.opencode` is mounted a second time read-only, on top of the writable repo
-mount, so the agent definitions and phase commands cannot be rewritten by the
-agent running under them.
+mount, so the agent running under those definitions cannot rewrite them.
 
-`user: "1000:1000"` runs the agent unprivileged. Two named volumes
-(`opencode-config`, `opencode-state`) keep opencode's own config and session
-history out of the repo and persistent across `--rm` runs.
+`user: "1000:1000"` runs the agent unprivileged. Two named volumes,
+`opencode-config` and `opencode-state`, keep opencode's own config and session
+history out of the repo and persist them across `--rm` runs.
 
-There is **no `extra_hosts` block and no name resolution to arrange.** Providers
-address the nodes by raw tailnet IP, so the container needs nothing mapped:
+There is no `extra_hosts` block, because providers address the nodes by raw
+tailnet IP. Mapping hostnames would describe each node twice, once as an address
+for Compose and once as a hostname inside the base URL, with nothing keeping the
+two in step. Addressing by IP also keeps the compose file free of interpolation,
+so `.env` reaches opencode by one path only, `env_file:`.
 
-```
-NODE_A_HOST=100.64.0.1:11434       # .env
-"baseURL": "http://{env:NODE_A_HOST}/v1"   # opencode.json
-```
+`env_file:` does not inherit the host shell, so
+`NODE_A_HOST=... docker compose run` will not override the file. Edit `.env`
+instead.
 
-Mapping hostnames with `extra_hosts` would describe each node twice — once as
-an address for Compose, once as a hostname inside the base URL — with nothing
-keeping the two in step. With MagicDNS not in use and the tailnet IP stable, the
-hostname earns nothing. Addressing by IP also keeps the compose file free of
-interpolation, so `.env` reaches opencode by exactly one path: `env_file:`.
-
-Compose loads `.env` from the directory holding the compose file — the same
-relative-path rule as the bind mounts above — and passes it into the container
-verbatim. Note that `env_file:` does **not** inherit the host shell, so
-`NODE_A_HOST=... docker compose run` will not override the file; edit `.env`.
-
-All six nodes (`node-a` through `node-f`) are configured, matching the first
-tool chain. To run on fewer machines, point several `NODE_*_HOST` variables at
-the same address — see [Running on fewer machines](#running-on-fewer-machines).
-
-## What has been verified
+### What has been verified
 
 Checked against opencode `1.18.29` with `opencode debug config` and
-`opencode debug agent build`, not assumed from documentation:
+`opencode debug agent`, rather than assumed from documentation.
 
 | Claim | Result |
 |---|---|
-| `external_directory` is a real permission key | Present in the binary; appears in the resolved rule set |
-| `"external_directory": "deny"` overrides the built-in `ask` | Confirmed — later rules win, and the user config merges last |
-| Both `opencode.json` and `.opencode/opencode.json` are loaded | Confirmed; project config overrides global |
+| `external_directory` is a real key, and `deny` overrides the built-in `ask` | Confirmed. Later rules win, and the user config merges last |
 | `.opencode/agent/` and `.opencode/command/` are read | All 7 agents and 6 commands register |
-| The plural `agents/` and `commands/` are *also* read | Confirmed — neither spelling is silently ignored |
-| `{env:VAR}` substitution | Resolves from process environment only |
-| `{env:VAR}` inside a `models` **key** | Confirmed — keys are substituted, not just values |
-| `{env:VAR}` in `.opencode/agent/*.md` frontmatter | **No** — stored verbatim; `modelID` stays `{env:VAR}` |
-| `{env:VAR}` in `.opencode/command/*.md` frontmatter | **No** — same as agent files; only `opencode.json` is substituted |
-| `agent:` in command frontmatter pins the role | Confirmed — all 5 appear as `agent=<role>` in the resolved `command` block |
-| Primary agents (`build`, `plan`) carry no model | Confirmed — they resolve from the top-level `model` at session start |
-| `agent.<role>.model` in `opencode.json` overrides the role file | Confirmed via `opencode debug agent <role>` |
-| An unset variable | Resolves to `""`, so a model key becomes `""` rather than erroring |
-| `{file:./path}` substitution | Resolves from file contents |
-| `{env:VAR}` mid-string | Confirmed — `http://{env:NODE_A_HOST}/v1` resolves |
-| `env_file:` passes `.env` into the container | Confirmed via `docker compose config`; shell values do not override it |
-| A `.env` file alone feeds `{env:}` | **No** — needs `env_file:` in Compose |
-| Relative bind mount resolves to this directory | Confirmed via `docker compose config` |
+| The plural `agents/` and `commands/` are also read | Confirmed. Neither spelling is ignored |
+| `{env:VAR}` substitution | Resolves from the process environment only |
+| `{env:VAR}` in a `models` key, and mid-string | Confirmed. Keys are substituted, and `http://{env:NODE_A_HOST}/v1` resolves |
+| `{env:VAR}` in agent or command frontmatter | Not substituted. The literal string is stored |
+| An unset variable | Resolves to an empty string rather than erroring |
+| `agent.<role>.model` overrides the role file | Confirmed with `opencode debug agent <role>` |
+| `agent:` in command frontmatter pins the role | Confirmed. All 5 appear as `agent=<role>` in the resolved config |
+| `build` and `plan` carry no model | Confirmed. They resolve from the top-level `model` at session start |
+| A `.env` file alone feeds `{env:}` | No. It needs `env_file:` in Compose |
+| Relative bind mount resolves to this directory | Confirmed with `docker compose config` |
+| `ghcr.io/anomalyco/opencode:1.18.29` is published and public | Confirmed against the GHCR API. The old `sst/opencode` path returns `DENIED` |
+| The base image can run the workflow on its own | No. Its build history is Alpine, `libgcc libstdc++ ripgrep`, and the opencode binary. No git and no runtime |
+| The `apk` packages the Dockerfile installs exist | Confirmed against the Alpine v3.24 package index, including `go` for a language swap |
 
-Two carve-outs survive `external_directory: deny`, both re-added by opencode
-after user config and not disableable from config: its own `tool-output` and
-temp directories. Inside the container those land in the `opencode-state`
-volume, not on the host filesystem.
+Two carve-outs survive `external_directory: deny`. opencode re-adds its own
+`tool-output` and temp directories after the user config, and no option disables
+them. Inside the container both land in the `opencode-state` volume rather than
+on the host filesystem.
 
-`opencode agent create` writes to the **plural** `.opencode/agents/`. Since both
-spellings load, using that command will quietly produce a second directory
-alongside the singular one — harmless, but worth knowing before the layout
-drifts.
+`opencode agent create` writes to the plural `.opencode/agents/`. Both spellings
+load, so it quietly produces a second directory beside the singular one.
 
-## Not done yet
+### Not done yet
 
-- **No Dockerfile.** `docker-compose.yaml` references an `opencode-sandbox`
-  image that has to be built first — opencode on a base image, a `1000:1000`
-  user, and whatever toolchain the `coder`/`tester`/`deployer` roles need.
-- **Agent and command bodies are `TODO` stubs.**
-- **`NODE_*_HOST` addresses are examples.** `.env.example` ships
-  `100.64.0.1` through `100.64.0.6`; replace them with `tailscale ip -4` output
-  from each machine.
-- **No model has been pulled by this repo.** Each node needs its role's model
-  present (`ollama pull llama3.1:8b` on a/b/e, `qwen2.5-coder:14b` on c/d/f),
-  exactly as in the first tool chain.
-- **`AGENTS.md`** has a `TODO` conventions section.
+- The sandbox image has not been built or run, because no Docker daemon was
+  available. The compose file resolves and the package names exist, but the
+  build itself and the named-volume ownership are unverified.
+- Agent and command bodies are `TODO` stubs.
+- `.env.example` ships example addresses, `100.64.0.1` through `100.64.0.6`.
+  Replace them with `tailscale ip -4` output from each machine.
+- No model has been pulled by this repo. Each node needs its role's model
+  present, as in the first tool chain.
+- `AGENTS.md` has a `TODO` conventions section.
 
-## Troubleshooting
-
-**A provider gets an empty `baseURL` or `apiKey`.** The variable never reached
-the container. `docker compose config` prints the resolved `environment:` block
-— if the value is `""` there, the problem is `.env`, not opencode.
-
-**A provider cannot connect.** There is no name resolution in the path any more,
-so it is the address or the tailnet. `docker compose config` shows what
-`NODE_A_HOST` reached the container as; `opencode debug config` shows the
-assembled `baseURL`. If both look right, test reachability directly:
-`curl http://$NODE_A_HOST/v1/models`.
-
-**The model 404s, or the agent picks the wrong one.** `opencode debug agent
-<role>` prints the resolved `providerID`/`modelID`. If `modelID` still reads
-`{env:...}`, the binding was put in the role's frontmatter, where substitution
-does not run — move it to the `agent` block in `opencode.json`. If it is empty,
-the variable is unset. If it is a plausible-looking ID that the server rejects,
-compare it against `curl http://$NODE_A_HOST/v1/models`.
-
-**An agent or command does not appear.** Run `opencode debug config` and look at
-the `agent` / `command` keys. Missing frontmatter `description` is the usual
-cause.
-
-**Checking what the agent is actually allowed to do.**
-`opencode debug agent build` prints the fully resolved permission list in
-evaluation order. Later entries override earlier ones.
-
-**`.opencode/.gitignore` appeared on its own.** opencode writes it. Expected.
-
-## Design notes
+### Design notes
 
 The two tool chains differ in where the sequencing lives. The first puts it in
-`run-workflow.sh` — an explicit, inspectable order with a human gate between
-phases, and the model never chooses what runs next. The second puts it in
-opencode's own command and agent files.
+`run-workflow.sh`, an explicit order with a human gate between phases, where the
+model never chooses what runs next. The second puts it in opencode's own command
+and agent files.
 
 The gap is narrower than it first looks. Pinning `agent:` in command frontmatter
 takes role selection away from the model, so five of six phases route as
-deterministically as a script would; what opencode still leaves to the model is
-*fan-out* inside `/phase-implement`, and the ordering of phases, which the user
-supplies by typing them. The first chain's remaining edge is that the order is
-enforced rather than conventional.
+deterministically as a script would. Only the fan-out inside `/phase-implement`
+is still left to a model, and the user supplies the phase order by typing the
+commands. The first chain's remaining advantage is that it enforces that order
+instead of relying on convention.
 
-That trade is the point of building both: the script is more reproducible, the
-opencode version is less to maintain and gets a real sandbox boundary almost
-for free. Neither property is available in the other without rebuilding it.
+That trade is the reason for building both. The script is more reproducible, and
+the opencode version is less to maintain and gets a real sandbox boundary almost
+for free.
 
-## Security note
+### Security note
 
 `.env` sits inside the `.:/workspace` mount, so the agent can read the keys with
-`cat .env`. opencode's built-in defaults gate this — `read` on `*.env` and
-`*.env.*` resolves to `ask`, and the config here does not override `read` — so
-it is an approval prompt, not a wall. To put the keys genuinely out of reach,
+`cat .env`. opencode's built-in defaults gate this, because `read` on `*.env`
+and `*.env.*` resolves to `ask` and this config does not override `read`. That
+makes it an approval prompt rather than a wall. To put the keys out of reach,
 pass them through `environment:` in Compose from a file kept outside the
-workspace instead.
+workspace.
