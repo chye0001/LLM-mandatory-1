@@ -23,6 +23,36 @@ local model cannot reach the rest of the machine.
 
 ### Setup
 
+## Ollama on each node
+
+Ollama defaults to `127.0.0.1:11434`, which is unreachable from other machines
+*and* rejects requests whose `Host` header is not localhost (HTTP 403).
+On every node, ensure OLLAMA_HOST is that machine's Tailscale IP:
+
+    Windows:
+    # Quit the tray app first; it holds port 11434
+    Get-Process ollama* -ErrorAction SilentlyContinue | Stop-Process
+
+    $env:OLLAMA_HOST = "100.x.y.z:11434"
+    $env:OLLAMA_KEEP_ALIVE = "30m"
+    $env:OLLAMA_MAX_LOADED_MODELS = "1"
+
+    ollama serve
+
+
+
+    Mac:
+    OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_HOST=100.x.y.z:11434 OLLAMA_KEEP_ALIVE=30m ollama serve
+
+
+
+    Linux:
+    Environment="OLLAMA_HOST=100.x.y.z:11434"
+    Environment="OLLAMA_KEEP_ALIVE=30m"
+    Environment="OLLAMA_MAX_LOADED_MODELS=1"
+    sudo systemctl daemon-reload && sudo systemctl restart ollama
+
+## .env
 Copy the example environment file.
 
 ```sh
