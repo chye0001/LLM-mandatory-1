@@ -3,11 +3,15 @@ description: Write the documentation
 agent: docwriter
 ---
 
-# Phase: Docs
+# Phase: docs
 
-TODO: what this phase does.
+Document what exists now.
 
-Runs as the `docwriter` agent, pinned in frontmatter — the command *is* that
-agent, so there is no delegation step to get wrong.
+Read `docs/architecture.md`, `docs/openapi.yaml`, `docs/quality-report.md` and
+the code under `src/`. If `src/` holds no code, say that the implement phase has
+not run and stop.
 
-Arguments: $ARGUMENTS
+Extra instructions for this run, which may be empty:
+$ARGUMENTS
+
+Finish by listing the files you wrote.

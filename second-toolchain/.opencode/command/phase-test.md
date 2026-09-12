@@ -3,11 +3,14 @@ description: Write and run the test suite
 agent: tester
 ---
 
-# Phase: Test
+# Phase: test
 
-TODO: what this phase does.
+Test what the coders built, then report the result.
 
-Runs as the `tester` agent, pinned in frontmatter — the command *is* that
-agent, so there is no delegation step to get wrong.
+Read `docs/tickets.md` and the code under `src/`. If `src/` holds no code, say
+that the implement phase has not run and stop.
 
-Arguments: $ARGUMENTS
+Extra instructions for this run, which may be empty:
+$ARGUMENTS
+
+Finish by stating the command you ran and the exit code it returned.

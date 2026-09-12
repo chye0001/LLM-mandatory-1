@@ -2,15 +2,23 @@
 description: Implement the open tickets
 ---
 
-# Phase: Implement
+# Phase: implement
 
-TODO: what this phase does, and how tickets are split between the two coders.
+Run both coders over `docs/tickets.md`.
 
-The one phase that is **not** pinned to an agent. `agent:` takes a single name,
-and this phase runs `coder-a` and `coder-b` in parallel, so it stays in the
-primary agent and fans out with the task tool. Splitting the `coder` role is the
-only reason that parallelism exists — pinning one coder here would discard it.
+Read `docs/tickets.md`. If it is missing, say that the tickets phase has not run
+and stop.
 
-Delegate to both `coder-a` and `coder-b`, one ticket set each.
+Delegate twice with the task tool, both in the same step so they run at the same
+time:
 
-Arguments: $ARGUMENTS
+- `coder-a` for the tickets marked `Lane: A`
+- `coder-b` for the tickets marked `Lane: B`
+
+Give each coder only its own lane. Implement nothing yourself.
+
+Extra instructions for this run, which may be empty:
+$ARGUMENTS
+
+When both return, report which tickets are closed and which are blocked. Leave a
+blocker for a rerun rather than fixing it here.

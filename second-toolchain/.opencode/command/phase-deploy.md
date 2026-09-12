@@ -1,13 +1,17 @@
 ---
-description: Build and deploy
+description: Validate that the application can be deployed
 agent: deployer
 ---
 
-# Phase: Deploy
+# Phase: deploy
 
-TODO: what this phase does.
+Validate that the application can be deployed somewhere else.
 
-Runs as the `deployer` agent, pinned in frontmatter — the command *is* that
-agent, so there is no delegation step to get wrong.
+Read `docs/architecture.md` and `src/README.md`. If `src/README.md` is missing,
+say that the docs phase has not run and stop.
 
-Arguments: $ARGUMENTS
+Extra instructions for this run, which may be empty:
+$ARGUMENTS
+
+Finish by stating whether the image built, with the command and its exit code,
+or why the build could not be verified.

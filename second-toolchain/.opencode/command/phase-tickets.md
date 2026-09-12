@@ -3,11 +3,14 @@ description: Break the architecture into tickets
 agent: techlead
 ---
 
-# Phase: Tickets
+# Phase: tickets
 
-TODO: what this phase does.
+Turn the architecture into the ticket list.
 
-Runs as the `techlead` agent, pinned in frontmatter — the command *is* that
-agent, so there is no delegation step to get wrong.
+Read `docs/architecture.md` and `docs/openapi.yaml`. If either is missing, say
+that the architecture phase has not run and stop.
 
-Arguments: $ARGUMENTS
+Extra instructions for this run, which may be empty:
+$ARGUMENTS
+
+Finish by reporting how many tickets are in each lane.

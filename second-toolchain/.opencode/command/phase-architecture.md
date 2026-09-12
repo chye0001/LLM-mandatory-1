@@ -3,11 +3,15 @@ description: Produce the system architecture
 agent: architect
 ---
 
-# Phase: Architecture
+# Phase: architecture
 
-TODO: what this phase does.
+Produce the architecture for the brief.
 
-Runs as the `architect` agent, pinned in frontmatter — the command *is* that
-agent, so there is no delegation step to get wrong.
+Read `docs/brief.md`. If it does not exist, write the brief below to
+`docs/brief.md` first, then carry on. If there is no brief in either place, say
+the brief is missing and stop.
 
-Arguments: $ARGUMENTS
+Extra instructions for this run, which may be empty:
+$ARGUMENTS
+
+Finish by listing the files you wrote.

@@ -13,7 +13,8 @@ assumption rather than invent a requirement.
 
 ## Task
 
-1. Read `docs/brief.md`. If it does not exist, say so and stop.
+1. Read `docs/brief.md`. If it does not exist and you were given a brief,
+   write it to `docs/brief.md` first. If you were given none, say so and stop.
 2. Decompose the system into components, each with one responsibility. Write
    `docs/architecture.md` holding those components, the deployment topology, and
    its constraints: which processes run, which ports they use, where state is
