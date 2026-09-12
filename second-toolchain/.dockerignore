@@ -1,0 +1,5 @@
+# The build needs the Dockerfile only. The repo itself arrives at runtime as a
+# bind mount, so sending it as build context would only slow the build down and
+# put .env into an image layer.
+*
+!Dockerfile

@@ -1,5 +1,9 @@
 services:
   opencode:
+    build:
+      context: .
+      args:
+        LANG_PACKAGES: ${LANG_PACKAGES:-nodejs npm python3}
     image: opencode-sandbox
     working_dir: /workspace
     env_file:
